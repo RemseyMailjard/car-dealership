@@ -4,9 +4,12 @@ import com.dealership.models.Vehicle;
 import com.dealership.services.Dealership;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * Loads and saves the dealership and its inventory from/to a pipe-delimited CSV file.
@@ -69,8 +72,30 @@ public class DealershipFileManager {
         }
     }
 
+    /**
+     * Overwrites the file with the dealership info and its current inventory.
+     *
+     * @throws IllegalStateException if the file cannot be written
+     */
     public void saveDealership(Dealership dealership) {
-        // TODO Phase 5: write the dealership and its vehicles back to the file
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
+            writer.write(String.join("|", dealership.getName(), dealership.getAddress(), dealership.getPhone()));
+            writer.newLine();
+
+            for (Vehicle v : dealership.getAllVehicles()) {
+                writer.write(v.getVin() + "|" + v.getYear() + "|" + v.getMake() + "|" + v.getModel() + "|"
+                        + v.getVehicleType() + "|" + v.getColor() + "|" + v.getOdometer() + "|"
+                        + formatPrice(v.getPrice()));
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not save inventory file: " + filePath, e);
+        }
+    }
+
+    /** Always writes prices with two decimals, e.g. 995 becomes 995.00 */
+    private String formatPrice(BigDecimal price) {
+        return price.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     /** Parses the first line: name|address|phone */
