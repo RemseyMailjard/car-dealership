@@ -10,18 +10,28 @@ import java.util.NoSuchElementException;
 import java.util.Scanner;
 
 /**
- * Handles all console input and output.
- * It never searches or changes the inventory itself; it asks the Dealership to do that.
+ * Handles all interaction with the user through the console.
+ *
+ * <p>This is the only class that reads from the keyboard or prints to the screen.
+ * It never searches or changes the inventory itself: it reads the user's input,
+ * asks the {@link Dealership} for a result, and shows that result. Keeping input
+ * and output separate from the business logic is called <em>separation of concerns</em>.
+ *
+ * <p>Every menu option has its own {@code process...Request()} method, so each
+ * method stays short and does one thing.
  */
 public class UserInterface {
 
+    /** Reads keyboard input. One Scanner is shared, because System.in should only be wrapped once. */
     private final Scanner scanner = new Scanner(System.in);
+    /** Loads the dealership at startup and saves it after every change. */
     private final DealershipFileManager fileManager = new DealershipFileManager();
+    /** The dealership being managed; set by {@link #init()}. */
     private Dealership dealership;
 
     /**
-     * Starts the application: loads the dealership and keeps showing
-     * the menu until the user chooses to quit.
+     * Starts the application: loads the dealership, then keeps showing the menu
+     * until the user chooses 99 (Quit) or the input ends.
      */
     public void display() {
         if (!init()) {
@@ -31,7 +41,8 @@ public class UserInterface {
         try {
             runMenuLoop();
         } catch (NoSuchElementException e) {
-            // Happens when input ends, e.g. the user presses Ctrl+D (Mac/Linux) or Ctrl+Z (Windows)
+            // Scanner throws this when there is no more input, e.g. when the user
+            // presses Ctrl+D (Mac/Linux) or Ctrl+Z (Windows). Exit politely instead of crashing.
             System.out.println();
             System.out.println("Input ended. Goodbye!");
         }
@@ -45,6 +56,8 @@ public class UserInterface {
             int choice = readInt("Enter your choice: ");
             System.out.println();
 
+            // "case 1 ->" is the modern switch syntax (Java 14+): no "break" needed,
+            // because only the code after the arrow runs.
             switch (choice) {
                 case 1 -> processGetByPriceRequest();
                 case 2 -> processGetByMakeModelRequest();
@@ -57,14 +70,18 @@ public class UserInterface {
                 case 9 -> processRemoveVehicleRequest();
                 case 99 -> {
                     System.out.println("Goodbye!");
-                    running = false;
+                    running = false; // ends the while loop
                 }
                 default -> System.out.println("Invalid choice. Please pick an option from the menu.");
             }
         }
     }
 
-    /** Loads the dealership from file. Returns false if that fails. */
+    /**
+     * Loads the dealership from the inventory file and shows a welcome message.
+     *
+     * @return {@code true} if loading worked; {@code false} if the app cannot continue
+     */
     private boolean init() {
         try {
             dealership = fileManager.getDealership();
@@ -72,12 +89,14 @@ public class UserInterface {
             System.out.println(dealership.getAddress() + " | " + dealership.getPhone());
             return true;
         } catch (IllegalStateException e) {
+            // Show a clear message instead of a stack trace
             System.out.println("Error: " + e.getMessage());
             System.out.println("The application cannot start without an inventory file.");
             return false;
         }
     }
 
+    /** Prints the main menu. */
     private void printMenu() {
         System.out.println();
         System.out.println("===== CAR DEALERSHIP =====");
@@ -97,9 +116,12 @@ public class UserInterface {
     }
 
     // ---------------------------------------------------------------
-    // Menu actions: read input, ask the Dealership, show the result
+    // Menu actions
+    // Each one follows the same three steps:
+    //   1. read the input   2. ask the Dealership   3. show the result
     // ---------------------------------------------------------------
 
+    /** Menu option 1: asks for a price range and shows the vehicles in it. */
     private void processGetByPriceRequest() {
         BigDecimal min = readPrice("Minimum price: ");
         BigDecimal max = readPrice("Maximum price: ");
@@ -110,13 +132,16 @@ public class UserInterface {
         displayVehicles(dealership.getVehiclesByPrice(min, max));
     }
 
+    /** Menu option 2: asks for a make and an optional model and shows the matches. */
     private void processGetByMakeModelRequest() {
         String make = readText("Make: ");
+        // Model may be left empty, so readText() (which rejects empty input) is not used here
         System.out.print("Model (press Enter for any model): ");
         String model = scanner.nextLine().trim();
         displayVehicles(dealership.getVehiclesByMakeModel(make, model));
     }
 
+    /** Menu option 3: asks for a year range and shows the vehicles in it. */
     private void processGetByYearRequest() {
         int min = readInt("Minimum year: ");
         int max = readInt("Maximum year: ");
@@ -127,10 +152,12 @@ public class UserInterface {
         displayVehicles(dealership.getVehiclesByYear(min, max));
     }
 
+    /** Menu option 4: asks for a color and shows the vehicles with that color. */
     private void processGetByColorRequest() {
         displayVehicles(dealership.getVehiclesByColor(readText("Color: ")));
     }
 
+    /** Menu option 5: asks for a mileage range and shows the vehicles in it. */
     private void processGetByMileageRequest() {
         int min = readInt("Minimum mileage: ");
         int max = readInt("Maximum mileage: ");
@@ -141,14 +168,21 @@ public class UserInterface {
         displayVehicles(dealership.getVehiclesByMileage(min, max));
     }
 
+    /** Menu option 6: asks for a vehicle type and shows the vehicles of that type. */
     private void processGetByVehicleTypeRequest() {
         displayVehicles(dealership.getVehiclesByType(readText("Vehicle type (car, truck, SUV, van): ")));
     }
 
+    /** Menu option 7: shows every vehicle in stock. */
     private void processGetAllVehiclesRequest() {
         displayVehicles(dealership.getAllVehicles());
     }
 
+    /**
+     * Menu option 8: asks for all details of a new vehicle, adds it, and saves.
+     * The UI only checks that numbers are numbers; the business rules
+     * (valid year, positive price, ...) are checked by {@link Dealership#addVehicle(Vehicle)}.
+     */
     private void processAddVehicleRequest() {
         System.out.println("--- Add a vehicle ---");
         int vin = readInt("VIN: ");
@@ -167,7 +201,6 @@ public class UserInterface {
 
         Vehicle vehicle = new Vehicle(vin, year, make, model, vehicleType, color, odometer, price);
         try {
-            // The Dealership checks the business rules (year range, no negative values, ...)
             if (dealership.addVehicle(vehicle)) {
                 System.out.println("Vehicle added:");
                 System.out.println(vehicle);
@@ -176,10 +209,15 @@ public class UserInterface {
                 System.out.println("A vehicle with VIN " + vin + " already exists.");
             }
         } catch (IllegalArgumentException e) {
+            // The exception message says which rule was broken, e.g. "Price must be greater than 0."
             System.out.println("Vehicle not added: " + e.getMessage());
         }
     }
 
+    /**
+     * Menu option 9: asks for a VIN, shows that vehicle, and removes it after
+     * the user confirms. Removing cannot be undone, hence the confirmation.
+     */
     private void processRemoveVehicleRequest() {
         int vin = readInt("VIN of the vehicle to remove: ");
         Vehicle vehicle = dealership.getVehicleByVin(vin);
@@ -202,10 +240,16 @@ public class UserInterface {
     }
 
     // ---------------------------------------------------------------
-    // Helpers
+    // Helpers, shared by the menu actions above so that code for
+    // showing results and reading input is not repeated.
     // ---------------------------------------------------------------
 
-    /** Prints a list of vehicles, or a message when the list is empty. */
+    /**
+     * Prints each vehicle on its own line (using {@link Vehicle#toString()}),
+     * followed by the number of results, or a message if the list is empty.
+     *
+     * @param vehicles the vehicles to show
+     */
     private void displayVehicles(List<Vehicle> vehicles) {
         if (vehicles.isEmpty()) {
             System.out.println("No vehicles found.");
@@ -217,7 +261,10 @@ public class UserInterface {
         System.out.println("(" + vehicles.size() + " vehicle(s) found)");
     }
 
-    /** Writes the inventory to file. The change stays in memory even if saving fails. */
+    /**
+     * Saves the inventory to the file. If saving fails, the user gets a warning,
+     * but the change is kept in memory for the rest of this session.
+     */
     private void save() {
         try {
             fileManager.saveDealership(dealership);
@@ -227,9 +274,20 @@ public class UserInterface {
         }
     }
 
-    /** Keeps asking until the user types a whole number. */
+    /*
+     * About reading input: every helper below uses scanner.nextLine() and then converts
+     * the text. Mixing nextInt() with nextLine() is a classic bug: nextInt() leaves the
+     * Enter key in the buffer, so the next nextLine() returns an empty string immediately.
+     */
+
+    /**
+     * Asks a question until the user types a whole number.
+     *
+     * @param prompt the question to show
+     * @return the number the user typed
+     */
     private int readInt(String prompt) {
-        while (true) {
+        while (true) { // repeat until a valid number is returned
             System.out.print(prompt);
             String input = scanner.nextLine().trim();
             try {
@@ -240,7 +298,13 @@ public class UserInterface {
         }
     }
 
-    /** Keeps asking until the user types a valid amount, such as 1995 or 1995.00 (no negatives). */
+    /**
+     * Asks a question until the user types a valid amount of money, such as
+     * {@code 1995} or {@code 1995.00}. A leading "$" is allowed; negative amounts are not.
+     *
+     * @param prompt the question to show
+     * @return the amount the user typed
+     */
     private BigDecimal readPrice(String prompt) {
         while (true) {
             System.out.print(prompt);
@@ -258,7 +322,12 @@ public class UserInterface {
         }
     }
 
-    /** Keeps asking until the user types something that is not empty. */
+    /**
+     * Asks a question until the user types something that is not empty.
+     *
+     * @param prompt the question to show
+     * @return the text the user typed, without surrounding spaces
+     */
     private String readText(String prompt) {
         while (true) {
             System.out.print(prompt);
