@@ -6,6 +6,7 @@ import com.dealership.services.Dealership;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Scanner;
 
 /**
@@ -27,6 +28,17 @@ public class UserInterface {
             return; // inventory could not be loaded; the reason was already printed
         }
 
+        try {
+            runMenuLoop();
+        } catch (NoSuchElementException e) {
+            // Happens when input ends, e.g. the user presses Ctrl+D (Mac/Linux) or Ctrl+Z (Windows)
+            System.out.println();
+            System.out.println("Input ended. Goodbye!");
+        }
+    }
+
+    /** Shows the menu and handles choices until the user picks 99. */
+    private void runMenuLoop() {
         boolean running = true;
         while (running) {
             printMenu();
