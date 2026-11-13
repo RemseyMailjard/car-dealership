@@ -4,6 +4,7 @@ import com.dealership.models.Vehicle;
 import com.dealership.persistence.DealershipFileManager;
 import com.dealership.services.Dealership;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Scanner;
 
@@ -84,31 +85,52 @@ public class UserInterface {
     }
 
     // ---------------------------------------------------------------
-    // Menu actions
+    // Menu actions: read input, ask the Dealership, show the result
     // ---------------------------------------------------------------
 
     private void processGetByPriceRequest() {
-        notYetAvailable(); // TODO Phase 5
+        BigDecimal min = readPrice("Minimum price: ");
+        BigDecimal max = readPrice("Maximum price: ");
+        if (max.compareTo(min) < 0) {
+            System.out.println("Maximum price cannot be lower than minimum price.");
+            return;
+        }
+        displayVehicles(dealership.getVehiclesByPrice(min, max));
     }
 
     private void processGetByMakeModelRequest() {
-        notYetAvailable(); // TODO Phase 5
+        String make = readText("Make: ");
+        System.out.print("Model (press Enter for any model): ");
+        String model = scanner.nextLine().trim();
+        displayVehicles(dealership.getVehiclesByMakeModel(make, model));
     }
 
     private void processGetByYearRequest() {
-        notYetAvailable(); // TODO Phase 5
+        int min = readInt("Minimum year: ");
+        int max = readInt("Maximum year: ");
+        if (max < min) {
+            System.out.println("Maximum year cannot be lower than minimum year.");
+            return;
+        }
+        displayVehicles(dealership.getVehiclesByYear(min, max));
     }
 
     private void processGetByColorRequest() {
-        notYetAvailable(); // TODO Phase 5
+        displayVehicles(dealership.getVehiclesByColor(readText("Color: ")));
     }
 
     private void processGetByMileageRequest() {
-        notYetAvailable(); // TODO Phase 5
+        int min = readInt("Minimum mileage: ");
+        int max = readInt("Maximum mileage: ");
+        if (max < min) {
+            System.out.println("Maximum mileage cannot be lower than minimum mileage.");
+            return;
+        }
+        displayVehicles(dealership.getVehiclesByMileage(min, max));
     }
 
     private void processGetByVehicleTypeRequest() {
-        notYetAvailable(); // TODO Phase 5
+        displayVehicles(dealership.getVehiclesByType(readText("Vehicle type (car, truck, SUV, van): ")));
     }
 
     private void processGetAllVehiclesRequest() {
@@ -116,11 +138,55 @@ public class UserInterface {
     }
 
     private void processAddVehicleRequest() {
-        notYetAvailable(); // TODO Phase 5
+        System.out.println("--- Add a vehicle ---");
+        int vin = readInt("VIN: ");
+        if (dealership.getVehicleByVin(vin) != null) {
+            // Check right away, so the user doesn't type everything else for nothing
+            System.out.println("A vehicle with VIN " + vin + " already exists.");
+            return;
+        }
+        int year = readInt("Year: ");
+        String make = readText("Make: ");
+        String model = readText("Model: ");
+        String vehicleType = readText("Vehicle type (car, truck, SUV, van): ");
+        String color = readText("Color: ");
+        int odometer = readInt("Odometer (miles): ");
+        BigDecimal price = readPrice("Price: ");
+
+        Vehicle vehicle = new Vehicle(vin, year, make, model, vehicleType, color, odometer, price);
+        try {
+            // The Dealership checks the business rules (year range, no negative values, ...)
+            if (dealership.addVehicle(vehicle)) {
+                System.out.println("Vehicle added:");
+                System.out.println(vehicle);
+                save();
+            } else {
+                System.out.println("A vehicle with VIN " + vin + " already exists.");
+            }
+        } catch (IllegalArgumentException e) {
+            System.out.println("Vehicle not added: " + e.getMessage());
+        }
     }
 
     private void processRemoveVehicleRequest() {
-        notYetAvailable(); // TODO Phase 5
+        int vin = readInt("VIN of the vehicle to remove: ");
+        Vehicle vehicle = dealership.getVehicleByVin(vin);
+        if (vehicle == null) {
+            System.out.println("No vehicle found with VIN " + vin + ".");
+            return;
+        }
+
+        System.out.println(vehicle);
+        System.out.print("Remove this vehicle? (y/n): ");
+        if (!scanner.nextLine().trim().equalsIgnoreCase("y")) {
+            System.out.println("Nothing removed.");
+            return;
+        }
+
+        if (dealership.removeVehicle(vehicle)) {
+            System.out.println("Vehicle removed.");
+            save();
+        }
     }
 
     // ---------------------------------------------------------------
@@ -139,8 +205,14 @@ public class UserInterface {
         System.out.println("(" + vehicles.size() + " vehicle(s) found)");
     }
 
-    private void notYetAvailable() {
-        System.out.println("This option is not available yet.");
+    /** Writes the inventory to file. The change stays in memory even if saving fails. */
+    private void save() {
+        try {
+            fileManager.saveDealership(dealership);
+            System.out.println("Inventory saved.");
+        } catch (IllegalStateException e) {
+            System.out.println("Warning: " + e.getMessage());
+        }
     }
 
     /** Keeps asking until the user types a whole number. */
@@ -153,6 +225,36 @@ public class UserInterface {
             } catch (NumberFormatException e) {
                 System.out.println("Please enter a whole number.");
             }
+        }
+    }
+
+    /** Keeps asking until the user types a valid amount, such as 1995 or 1995.00 (no negatives). */
+    private BigDecimal readPrice(String prompt) {
+        while (true) {
+            System.out.print(prompt);
+            // Commas are NOT removed: "1995,00" would silently become 199500
+            String input = scanner.nextLine().trim().replace("$", "");
+            try {
+                BigDecimal amount = new BigDecimal(input);
+                if (amount.compareTo(BigDecimal.ZERO) >= 0) {
+                    return amount;
+                }
+                System.out.println("Amount cannot be negative.");
+            } catch (NumberFormatException e) {
+                System.out.println("Please enter an amount, for example 1995.00");
+            }
+        }
+    }
+
+    /** Keeps asking until the user types something that is not empty. */
+    private String readText(String prompt) {
+        while (true) {
+            System.out.print(prompt);
+            String input = scanner.nextLine().trim();
+            if (!input.isEmpty()) {
+                return input;
+            }
+            System.out.println("This field cannot be empty.");
         }
     }
 }
